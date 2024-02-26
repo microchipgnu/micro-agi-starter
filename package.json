@@ -3,13 +3,16 @@
   "module": "index.tsx",
   "type": "module",
   "scripts": {
-    "start": "bun run index.tsx"
+    "start": "bun run index.tsx",
+    "dev": "bun run --hot index.tsx"
   },
   "devDependencies": {
     "@types/bun": "^1.0.0"
   },
   "dependencies": {
+    "@langchain/community": "^0.0.30",
     "ai-jsx": "0.29.0",
+    "langchain": "^0.1.20",
     "micro-agi": "0.0.0-alpha.28"
   }
 }

@@ -1,35 +1,73 @@
 /** @jsxImportSource ai-jsx */
 import * as AI from "ai-jsx";
-import Agent from "micro-agi/core/components/agent";
-import Task from "micro-agi/core/components/task";
-import Team from "micro-agi/core/components/team";
+import ModelSelector from "micro-agi/core/models/model-selector";
 
-const App = async ({ topic }: { topic: string }) => {
+import {
+  ChatCompletion,
+  SystemMessage,
+  UserMessage,
+} from "ai-jsx/core/completion";
+
+import { TextLoader } from "langchain/document_loaders/fs/text";
+import { OllamaEmbeddings } from "langchain/embeddings/ollama";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import readline from "readline";
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+const textSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: 4000,
+  chunkOverlap: 30,
+});
+
+const embeddings = new OllamaEmbeddings({
+  model: "openhermes",
+  baseUrl: "http://localhost:11434",
+});
+
+console.log("Indexing docs...");
+const loader = new TextLoader("docs.md");
+const rawDocuments = await loader.load();
+const docs = await textSplitter.splitDocuments(rawDocuments);
+const vectorStore = await MemoryVectorStore.fromDocuments(docs, embeddings);
+console.log("✨ Ready! ✨\n");
+
+const Question = async ({ question }: { question: string }) => {
+  const result = await vectorStore.similaritySearch(question, 5);
+
   return (
-    <Team process="sequential">
-      <Agent
-        agentType="mrkl"
-        role="Writer"
-        goal="Write articles about a topic"
-        backstory="You are a very experienced writer. You've written thousands of article in your career."
-        model="mistral"
-        provider="ollama"
-      >
-        <Task
-          onStart={async () => {
-            console.log("Started writing article about", topic);
-          }}
-          onDone={async () => {
-            console.log("Done writing article about", topic);
-          }}
-        >
-          Write an article about {topic}. Your result in markdown format.
-        </Task>
-      </Agent>
-    </Team>
+    <ModelSelector provider="ollama" model="openhermes">
+      <ChatCompletion>
+        <SystemMessage>
+          You are a knowledge base agent who answers questions based on these
+          docs: {JSON.stringify(result)}
+        </SystemMessage>
+        <UserMessage>{question}</UserMessage>
+      </ChatCompletion>
+    </ModelSelector>
   );
 };
 
-const renderContext = AI.createRenderContext();
-const result = await renderContext.render(<App topic="Apple" />);
-await Bun.write(`./result.json`, result);
+const askQuestion = () => {
+  rl.question("User: ", async (question) => {
+    if (question.toLowerCase() === "exit") {
+      rl.close();
+      console.log("Exiting...");
+    } else {
+      const renderContext = AI.createRenderContext();
+      console.log("Loading...\n");
+      const result = await renderContext.render(
+        <Question question={question} />
+      );
+      console.log(`Assistant: ${result}\n`);
+      askQuestion();
+    }
+  });
+};
+
+askQuestion();
